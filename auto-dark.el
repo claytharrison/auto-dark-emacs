@@ -95,7 +95,7 @@ end tell")))
 this is less efficient, but works for non-GUI Emacs."
   (string-equal "true" (string-trim (shell-command-to-string "osascript -e 'tell application \"System Events\" to tell appearance preferences to return dark mode'"))))
 
-(defun auto-dark--is-dark-mode-dbus ()
+(defun auto-dark--is-dark-mode-dbus-old ()
   "Use Emacs built-in D-Bus function to determine if dark theme is enabled."
   (eq 1 (caar (dbus-ignore-errors
                 (dbus-call-method
@@ -104,6 +104,16 @@ this is less efficient, but works for non-GUI Emacs."
                  "/org/freedesktop/portal/desktop"
                  "org.freedesktop.portal.Settings" "Read"
                  "org.freedesktop.appearance" "color-scheme")))))
+
+(defun auto-dark--is-dark-mode-dbus ()
+  "Use Emacs built-in D-Bus function to determine if dark theme is enabled, but on Cinnamon we need to check org.x.apps.portal color-scheme"
+  (eq 1 (caar (dbus-ignore-errors
+                (dbus-call-method
+                 :session
+                 "org.x.apps.portal.Desktop"
+                 "/org/x/apps/portal/desktop"
+                 "org.x.apps.portal.Settings" "Read"
+                 "org.x.apps.portal" "color-scheme")))))
 
 (defun auto-dark--is-dark-mode-powershell ()
   "Invoke powershell using Emacs using external shell command."
@@ -179,7 +189,7 @@ Argument APPEARANCE should be light or dark."
   (when (timerp auto-dark--timer)
     (cancel-timer auto-dark--timer)))
 
-(defun auto-dark--register-dbus-listener ()
+(defun auto-dark--register-dbus-listener-old ()
   "Register a callback function with D-Bus.
 Ask D-Bus to send us a signal on theme change and add a callback
 to change the theme."
@@ -192,6 +202,22 @@ to change the theme."
          "SettingChanged"
          (lambda (path var val)
            (when (and (string= path "org.freedesktop.appearance")
+                      (string= var "color-scheme"))
+             (auto-dark--set-theme (pcase (car val) (0 'light) (1 'dark) (2 'light))))))))
+
+(defun auto-dark--register-dbus-listener ()
+  "Register a callback function with D-Bus.
+Ask D-Bus to send us a signal on theme change and add a callback
+to change the theme."
+  (setq auto-dark--dbus-listener-object
+        (dbus-register-signal
+         :session
+         "org.x.apps.portal.Desktop"
+         "/org/x/apps/portal/desktop"
+         "org.x.apps.portal.Settings"
+         "SettingChanged"
+         (lambda (path var val)
+           (when (and (string= path "org.x.apps.portal.appearance")
                       (string= var "color-scheme"))
              (auto-dark--set-theme (pcase (car val) (0 'light) (1 'dark) (2 'light))))))))
 
